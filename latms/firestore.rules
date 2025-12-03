@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['ADMIN', 'MANAGEMENT'];
+    }
+    
+    function isHR() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'HR';
+    }
+    
+    function isAccounts() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ACCOUNTS';
+    }
+    
+    function isManager() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['MANAGER', 'SUPERVISOR'];
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Everyone can read user data (for lookups)
+      allow read: if isAuthenticated();
+      // Only admins can create/update/delete users
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Leave requests
+    match /leaveRequests/{requestId} {
+      // Everyone can read leave requests (filtered by app logic)
+      allow read: if isAuthenticated();
+      
+      // Employees can create their own leave requests
+      allow create: if isAuthenticated();
+      
+      // Employees can update their own pending requests
+      // Managers, HR, and Admins can update any request
+      allow update: if isOwner(resource.data.userId) || 
+                      isManager() || 
+                      isHR() || 
+                      isAdmin();
+      
+      // Only admins can delete leave requests
+      allow delete: if isAdmin();
+    }
+    
+    // Ticket requests
+    match /ticketRequests/{ticketId} {
+      // Everyone can read (filtered by app logic)
+      allow read: if isAuthenticated();
+      
+      // HR and Admins can create ticket requests
+      allow create: if isHR() || isAdmin();
+      
+      // HR, Accounts, and Admins can update tickets
+      allow update: if isHR() || isAccounts() || isAdmin();
+      
+      // Only admins can delete tickets
+      allow delete: if isAdmin();
+    }
+  }
+}

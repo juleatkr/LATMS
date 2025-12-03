@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String         @id @default(cuid())
+  staffCode        String         @unique
+  email            String         @unique
+  password         String
+  name             String
+  role             String         @default("EMPLOYEE") // EMPLOYEE, SUPERVISOR, MANAGER, HR, MANAGEMENT, ACCOUNTS, ADMIN
+  department       String?
+  position         String?
+  location         String?
+  annualLeaveBal   Int            @default(30)
+  ticketEligible   Boolean        @default(true)
+  supervisorId     String?
+  supervisor       User?          @relation("SupervisorRelation", fields: [supervisorId], references: [id], onDelete: SetNull)
+  subordinates     User[]         @relation("SupervisorRelation")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  leaveRequests    LeaveRequest[] @relation("EmployeeLeaveRequests")
+  submittedRequests LeaveRequest[] @relation("SupervisorSubmittedRequests")
+}
+
+model LeaveRequest {
+  id                  String         @id @default(cuid())
+  userId              String
+  user                User           @relation("EmployeeLeaveRequests", fields: [userId], references: [id])
+  submittedById       String?
+  submittedBy         User?          @relation("SupervisorSubmittedRequests", fields: [submittedById], references: [id])
+  type                String // Annual, Sick, Emergency
+  startDate           DateTime
+  endDate             DateTime
+  days                Int
+  status              String         @default("PENDING_MANAGER") // PENDING_MANAGER, PENDING_HR, PENDING_MANAGEMENT, APPROVED, REJECTED
+  reason              String?
+  
+  // Approval tracking
+  managerApprovedBy   String?        // Staff code or name of manager who approved
+  managerApprovedAt   DateTime?
+  hrApprovedBy        String?        // Staff code or name of HR who approved
+  hrApprovedAt        DateTime?
+  managementApprovedBy String?       // Staff code or name of Management who approved
+  managementApprovedAt DateTime?
+  
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  ticketRequest       TicketRequest?
+}
+
+model TicketRequest {
+  id             String       @id @default(cuid())
+  leaveRequestId String       @unique
+  leaveRequest   LeaveRequest @relation(fields: [leaveRequestId], references: [id])
+  status         String       @default("PENDING_QUOTES") // PENDING_QUOTES, QUOTES_UPLOADED, TICKET_ISSUED
+  route          String
+  quotes         String? // JSON string storing quote details
+  selectedQuote  String? // JSON string of the selected quote
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}

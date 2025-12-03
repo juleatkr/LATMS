@@ -1,0 +1,26 @@
+Searching for user Rohit Verma...
+Found User: ROHIT VERMA (cmioeilgm000adrdwaoyokl62)
+
+Found 1 leave request(s):
+
+============================================================
+Request ID: 0znViEJXtqnrvJWAd6mu
+Type: Annual Leave
+Status: APPROVED
+Start Date: Thu Dec 04 2025 04:00:00 GMT+0400 (Gulf Standard Time)
+End Date: Sun Jan 04 2026 04:00:00 GMT+0400 (Gulf Standard Time)
+------------------------------------------------------------
+APPROVAL FLOW:
+------------------------------------------------------------
+1. MANAGER/SUPERVISOR APPROVAL:
+   Status: Pending
+
+2. HR APPROVAL:
+   Approved by: AYA HASSAN FAIZ AL DHAFRI
+   Date & Time: Wed Dec 03 2025 11:48:18 GMT+0400 (Gulf Standard Time)
+
+3. MANAGEMENT APPROVAL:
+   Approved by: JULEAT KOTTOOR RAVINDRANATHAN
+   Date & Time: Wed Dec 03 2025 11:48:50 GMT+0400 (Gulf Standard Time)
+============================================================
+
