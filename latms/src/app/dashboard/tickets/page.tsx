@@ -27,8 +27,8 @@ export default function MyTicketsPage() {
         try {
             const response = await fetch("/api/tickets");
             if (response.ok) {
-                const data = await response.json();
-                setTickets(data);
+                const result = await response.json();
+                setTickets(result.data || []);
             }
         } catch (error) {
             console.error("Error fetching tickets:", error);

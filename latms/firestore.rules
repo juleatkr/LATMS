@@ -32,8 +32,9 @@ service cloud.firestore {
     
     // Users collection
     match /users/{userId} {
-      // Everyone can read user data (for lookups)
-      allow read: if isAuthenticated();
+      // Allow public read for authentication (login needs to query by email)
+      // In production, consider using Firebase Auth instead of custom auth
+      allow read: if true;
       // Only admins can create/update/delete users
       allow create, update, delete: if isAdmin();
     }
@@ -62,8 +63,8 @@ service cloud.firestore {
       // Everyone can read (filtered by app logic)
       allow read: if isAuthenticated();
       
-      // HR and Admins can create ticket requests
-      allow create: if isHR() || isAdmin();
+      // Any authenticated user can create ticket requests (created when submitting leave requests)
+      allow create: if isAuthenticated();
       
       // HR, Accounts, and Admins can update tickets
       allow update: if isHR() || isAccounts() || isAdmin();

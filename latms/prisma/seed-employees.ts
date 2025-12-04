@@ -9,11 +9,22 @@ async function main() {
     const csvFilePath = path.resolve(__dirname, '../../docs/Sponsorwise Employee List 02-12-25.csv');
     const fileContent = fs.readFileSync(csvFilePath, { encoding: 'utf-8' });
 
+interface EmployeeRecord {
+    'Staff Code': string;
+    'Name': string;
+    'Email': string;
+    'Department': string;
+    'Location': string;
+    'Role': string;
+    'Supervisor': string;
+    'Leave Bal': string;
+}
+
     const records = parse(fileContent, {
         columns: true,
         skip_empty_lines: true,
         trim: true,
-    });
+    }) as EmployeeRecord[];
 
     console.log(`Found ${records.length} records to process.`);
 

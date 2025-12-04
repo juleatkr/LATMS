@@ -28,10 +28,15 @@ class FirebaseService {
     // ==========================================
 
     async getUser(userId: string) {
-        const docRef = doc(db, 'users', userId);
-        const snapshot = await getDoc(docRef);
-        if (!snapshot.exists()) return null;
-        return { id: snapshot.id, ...snapshot.data() } as FirebaseUser;
+        try {
+            const { adminDb } = await import('./firebase-admin');
+            const doc = await adminDb.collection('users').doc(userId).get();
+            if (!doc.exists) return null;
+            return { id: doc.id, ...doc.data() } as FirebaseUser;
+        } catch (error) {
+            console.error('Error in getUser (Admin SDK):', error);
+            return null;
+        }
     }
 
     async getUserByEmail(email: string) {
@@ -89,17 +94,52 @@ class FirebaseService {
     }
 
     async createUser(data: any) {
-        const id = doc(collection(db, 'users')).id; // Auto-gen ID
-        const ref = doc(db, 'users', id);
+        try {
+            // Import admin SDK dynamically (only on server)
+            const { adminAuth } = await import('./firebase-admin');
 
-        const firebaseData = {
-            ...data,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
-        };
+            // Step 1: Create Firebase Auth user
+            const authUser = await adminAuth.createUser({
+                email: data.email,
+                password: data.password, // Firebase Auth will hash this automatically
+                displayName: data.name,
+                disabled: false,
+            });
 
-        await setDoc(ref, firebaseData);
-        return { id, ...firebaseData };
+            console.log('✅ Created Firebase Auth user:', authUser.uid);
+
+            // Step 2: Create Firestore user document using the Auth UID
+            const ref = doc(db, 'users', authUser.uid);
+
+            const firebaseData = {
+                ...data,
+                // Don't store plain password in Firestore anymore
+                password: undefined, // Remove password from Firestore
+                authUid: authUser.uid, // Store the Firebase Auth UID
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now()
+            };
+
+            // Remove undefined fields
+            Object.keys(firebaseData).forEach(key =>
+                firebaseData[key] === undefined && delete firebaseData[key]
+            );
+
+            await setDoc(ref, firebaseData);
+
+            console.log('✅ Created Firestore user document:', authUser.uid);
+
+            return { id: authUser.uid, ...firebaseData };
+        } catch (error: any) {
+            console.error('❌ Error creating user:', error);
+
+            // If it's an auth error, provide more context
+            if (error.code === 'auth/email-already-exists') {
+                throw new Error('A user with this email already exists');
+            }
+
+            throw error;
+        }
     }
 
     async updateUser(id: string, data: any) {
@@ -109,13 +149,54 @@ class FirebaseService {
             updatedAt: Timestamp.now()
         };
         await updateDoc(ref, updateData);
+
+        // If password is being updated, also update Firebase Auth
+        if (data.password) {
+            try {
+                // Import admin SDK dynamically (only on server)
+                const { adminAuth } = await import('./firebase-admin');
+                await adminAuth.updateUser(id, {
+                    password: data.password
+                });
+                console.log('✅ Password updated in Firebase Auth for user:', id);
+            } catch (error) {
+                console.error('❌ Failed to update Firebase Auth password:', error);
+                // Note: We log the error but don't throw, so the Firestore update remains valid.
+                // In a strict consistency model, you might want to revert the Firestore change.
+            }
+        }
+
         return { id, ...updateData };
     }
 
     async deleteUser(id: string) {
-        const ref = doc(db, 'users', id);
-        await deleteDoc(ref);
-        return true;
+        try {
+            // Import admin SDK dynamically (only on server)
+            const { adminAuth } = await import('./firebase-admin');
+
+            // Step 1: Delete from Firebase Auth
+            await adminAuth.deleteUser(id);
+            console.log('✅ Deleted Firebase Auth user:', id);
+
+            // Step 2: Delete from Firestore
+            const ref = doc(db, 'users', id);
+            await deleteDoc(ref);
+            console.log('✅ Deleted Firestore user document:', id);
+
+            return true;
+        } catch (error: any) {
+            console.error('❌ Error deleting user:', error);
+
+            // If user doesn't exist in Auth, still try to delete from Firestore
+            if (error.code === 'auth/user-not-found') {
+                const ref = doc(db, 'users', id);
+                await deleteDoc(ref);
+                console.log('⚠️ User not in Auth, but deleted from Firestore:', id);
+                return true;
+            }
+
+            throw error;
+        }
     }
 
     // ==========================================
@@ -123,21 +204,30 @@ class FirebaseService {
     // ==========================================
 
     async createLeaveRequest(data: any) {
+        const { adminDb, default: admin } = await import('./firebase-admin');
+
         // Generate a new ID if not provided
-        const id = data.id || doc(collection(db, 'leaveRequests')).id;
-        const leaveRef = doc(db, 'leaveRequests', id);
+        const id = data.id || adminDb.collection('leaveRequests').doc().id;
 
         // Convert to Firebase format (handling dates, etc.)
         const firebaseData = {
             ...data,
-            startDate: Timestamp.fromDate(new Date(data.startDate)),
-            endDate: Timestamp.fromDate(new Date(data.endDate)),
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
+            startDate: admin.firestore.Timestamp.fromDate(new Date(data.startDate)),
+            endDate: admin.firestore.Timestamp.fromDate(new Date(data.endDate)),
+            createdAt: admin.firestore.Timestamp.now(),
+            updatedAt: admin.firestore.Timestamp.now()
         };
 
-        await setDoc(leaveRef, firebaseData);
-        return { id, ...firebaseData };
+        await adminDb.collection('leaveRequests').doc(id).set(firebaseData);
+
+        return {
+            id,
+            ...firebaseData,
+            startDate: firebaseData.startDate.toDate(),
+            endDate: firebaseData.endDate.toDate(),
+            createdAt: firebaseData.createdAt.toDate(),
+            updatedAt: firebaseData.updatedAt.toDate()
+        };
     }
 
     async getLeaveRequests(filters: {
@@ -210,8 +300,8 @@ class FirebaseService {
             // So we can just return the data.
 
             return {
-                id: docSnap.id,
                 ...data,
+                id: docSnap.id,
                 // Convert Timestamps to Dates for the frontend
                 startDate: data.startDate instanceof Timestamp ? data.startDate.toDate() : data.startDate,
                 endDate: data.endDate instanceof Timestamp ? data.endDate.toDate() : data.endDate,
@@ -258,8 +348,8 @@ class FirebaseService {
         // Fetch related ticket request if needed (omitted for now as usually not needed for simple status update)
 
         return {
-            id: snapshot.id,
             ...data,
+            id: snapshot.id,
             startDate: data.startDate instanceof Timestamp ? data.startDate.toDate() : data.startDate,
             endDate: data.endDate instanceof Timestamp ? data.endDate.toDate() : data.endDate,
             createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
@@ -289,17 +379,24 @@ class FirebaseService {
     // ==========================================
 
     async createTicketRequest(data: any) {
-        const id = data.id || doc(collection(db, 'ticketRequests')).id;
-        const ref = doc(db, 'ticketRequests', id);
+        const { adminDb, default: admin } = await import('./firebase-admin');
+
+        const id = data.id || adminDb.collection('ticketRequests').doc().id;
 
         const firebaseData = {
             ...data,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
+            createdAt: admin.firestore.Timestamp.now(),
+            updatedAt: admin.firestore.Timestamp.now()
         };
 
-        await setDoc(ref, firebaseData);
-        return { id, ...firebaseData };
+        await adminDb.collection('ticketRequests').doc(id).set(firebaseData);
+
+        return {
+            id,
+            ...firebaseData,
+            createdAt: firebaseData.createdAt.toDate(),
+            updatedAt: firebaseData.updatedAt.toDate()
+        };
     }
 
     async getTicketRequests() {

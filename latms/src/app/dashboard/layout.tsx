@@ -37,12 +37,17 @@ export default function DashboardLayout({
                         📂 My Requests
                     </Link>
 
-                    <div className="sidebar-section-label" style={{ marginTop: '2rem' }}>
-                        Supervisor
-                    </div>
-                    <Link href="/dashboard/leave/post-for-team" className="sidebar-link">
-                        👥 Post Leave for Team
-                    </Link>
+                    {/* @ts-ignore */}
+                    {session?.user?.role !== 'EMPLOYEE' && (
+                        <>
+                            <div className="sidebar-section-label" style={{ marginTop: '2rem' }}>
+                                Supervisor
+                            </div>
+                            <Link href="/dashboard/leave/post-for-team" className="sidebar-link">
+                                👥 Post Leave for Team
+                            </Link>
+                        </>
+                    )}
 
                     <div className="sidebar-section-label" style={{ marginTop: '2rem' }}>
                         Travel

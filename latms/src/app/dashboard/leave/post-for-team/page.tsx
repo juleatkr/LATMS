@@ -20,6 +20,11 @@ export default function PostLeaveForTeamPage() {
     const [ticketRequired, setTicketRequired] = useState(false);
     const [error, setError] = useState("");
 
+    // Searchable Dropdown State
+    const [searchTerm, setSearchTerm] = useState("");
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [currentUserRole, setCurrentUserRole] = useState("");
+
     // Form State
     const [formData, setFormData] = useState({
         leaveType: "Annual Leave",
@@ -35,6 +40,27 @@ export default function PostLeaveForTeamPage() {
     });
 
     useEffect(() => {
+        // Check session for role-based access
+        const checkSession = async () => {
+            try {
+                const res = await fetch('/api/auth/session');
+                const session = await res.json();
+                if (session?.user) {
+                    const role = session.user.role;
+                    setCurrentUserRole(role);
+                    // Redirect if user is just an EMPLOYEE (not authorized for this page)
+                    if (role === 'EMPLOYEE') {
+                        router.push('/dashboard');
+                    }
+                } else {
+                    router.push('/auth/signin');
+                }
+            } catch (e) {
+                console.error("Session check failed", e);
+            }
+        };
+        checkSession();
+
         // Fetch employees
         const fetchEmployees = async () => {
             try {
@@ -50,7 +76,13 @@ export default function PostLeaveForTeamPage() {
             }
         };
         fetchEmployees();
-    }, []);
+    }, [router]);
+
+    // Filter employees based on search term
+    const filteredEmployees = employees.filter(emp =>
+        emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.staffCode.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     const selectedEmp = employees.find(emp => emp.id === selectedEmployee);
 
@@ -146,24 +178,77 @@ export default function PostLeaveForTeamPage() {
                         <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e40af' }}>Select Employee</h3>
                     </div>
 
-                    <div style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ marginBottom: '0.75rem', position: 'relative' }}>
                         <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.25rem', color: 'var(--text-main)' }}>
-                            Choose Team Member
+                            Choose Team Member (Type to search)
                         </label>
-                        <select
+                        <input
+                            type="text"
                             className="form-input"
+                            placeholder="Search by name or ID..."
+                            value={searchTerm}
+                            onChange={(e) => {
+                                setSearchTerm(e.target.value);
+                                setIsDropdownOpen(true);
+                                if (selectedEmployee) setSelectedEmployee(""); // Reset selection if typing new search
+                            }}
+                            onFocus={() => setIsDropdownOpen(true)}
+                            // Delay blur to allow click on dropdown items
+                            onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
                             style={{ width: '100%' }}
-                            value={selectedEmployee}
-                            onChange={(e) => setSelectedEmployee(e.target.value)}
-                            required
-                        >
-                            <option value="">-- Select an employee --</option>
-                            {employees.map(emp => (
-                                <option key={emp.id} value={emp.id}>
-                                    {emp.name} ({emp.staffCode})
-                                </option>
-                            ))}
-                        </select>
+                        />
+
+                        {isDropdownOpen && (
+                            <div style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                right: 0,
+                                maxHeight: '250px',
+                                overflowY: 'auto',
+                                backgroundColor: 'white',
+                                border: '1px solid #bfdbfe',
+                                borderRadius: '0 0 0.375rem 0.375rem',
+                                zIndex: 50,
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                            }}>
+                                {filteredEmployees.length > 0 ? (
+                                    filteredEmployees.map(emp => (
+                                        <div
+                                            key={emp.id}
+                                            onClick={() => {
+                                                setSelectedEmployee(emp.id);
+                                                setSearchTerm(`${emp.name} (${emp.staffCode})`);
+                                                setIsDropdownOpen(false);
+                                            }}
+                                            style={{
+                                                padding: '0.75rem',
+                                                cursor: 'pointer',
+                                                borderBottom: '1px solid #f1f5f9',
+                                                fontSize: '0.9rem',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                                        >
+                                            <div>
+                                                <div style={{ fontWeight: '600', color: '#1e3a8a' }}>{emp.name}</div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{emp.department}</div>
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b', backgroundColor: '#f1f5f9', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
+                                                {emp.staffCode}
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
+                                        No employees found matching "{searchTerm}"
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {selectedEmp && (
